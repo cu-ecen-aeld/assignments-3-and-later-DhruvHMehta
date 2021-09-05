@@ -25,9 +25,6 @@ int main(int argc, char* argv[])
 	char *writestr	= argv[2];
 	char openpath[200];
 
-	printf("%s\n", path);
-	printf("%s\n", writestr);	
-
 	/* Open file to write */
 	int fd = open(path, O_CREAT | O_RDWR, S_IRWXU);
 
@@ -47,13 +44,11 @@ int main(int argc, char* argv[])
 			strcpy(openpath, path);
 			strcat(openpath, "/");
 			
-			printf("path is %s\n", strcat(openpath, filename));	
 			fd = open(openpath, O_CREAT | O_RDWR, S_IRWXU);
 			
 			/* File could not be opened, quit program */
 			if(fd == -1)
 			{
-				printf("open error = %s\n", strerror(openerr));
 				syslog(LOG_ERR, "open error = %s\n", strerror(openerr));
 				exit(1);
 			}
@@ -61,7 +56,6 @@ int main(int argc, char* argv[])
 
 		else
 		{	/* Some other error, print it and exit program */
-			printf("File could not be created, error = %s\n", strerror(openerr));
 			syslog(LOG_ERR, "File could not be created, error = %s\n", strerror(openerr));
 			exit(1);	
 		}
@@ -74,7 +68,6 @@ int main(int argc, char* argv[])
 	/* Number of bytes written != -1 and == length of writestr */
 	if(byteswr != strlen(writestr))
 	{
-		printf("File could not be written to, error = %s\n", strerror(errno));
 		syslog(LOG_ERR, "File could not be written to, error = %s\n", strerror(errno));
 	}
 
@@ -84,7 +77,6 @@ int main(int argc, char* argv[])
 	close(fd);
 	if(fd == -1)
 	{
-		printf("File could not be closed, error = %s\n", strerror(errno));
 		syslog(LOG_ERR, "File could not be closed, error = %s\n", strerror(errno));
 	}
 
