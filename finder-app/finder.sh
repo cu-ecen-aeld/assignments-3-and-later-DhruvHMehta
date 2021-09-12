@@ -1,37 +1,32 @@
-#!/bin/bash
+#!/bin/sh
 
 if [ $# -lt 2 ]
 then
-	echo filesdir and searchstr were not specified, exitting.
+	echo FILESDIR and SEARCHSTR were not specified, exitting.
 	echo Usage: ./finder.sh /path/to/directory/to/search string_to_search.
 	exit 1
 fi
 
-filesdir=$1
-searchstr=$2
+echo "after lt"
 
-if [ -d $filesdir ]
+FILESDIR=$1
+SEARCHSTR=$2
+
+if [ -d $FILESDIR ]
 then 
-	cd $filesdir
+	cd $FILESDIR
 else
-	echo $filesdir is not a valid directory on the file system, exitting.
+	echo $FILESDIR is not a valid directory on the file system, exitting.
 	echo Please enter a valid directory/path.
 	exit 1
 fi
 
-i=0
-j=0
+echo "after filesdir"
 
-matchlist=$(grep -r $searchstr -c | cut -d":" -f2)
+i=$(grep -rcl "${SEARCHSTR}" "${FILESDIR}" | wc -l)
 
-iter=$(grep -r $searchstr -c | cut -d":" -f2 | wc -l)
-i=$(grep -r $searchstr -c -l | wc -l)
-
-for ((num = 1; num <= $iter; num++ ))
-do
-	k=$(echo $matchlist | cut -d" " -f$num)
-	j=$(($j + $k))
-done
+echo "aftre first i"
+j=$(grep "${SEARCHSTR}" $(find "${FILESDIR}" -type f) | wc -l)
 
 echo The number of files are $i and the number of matching lines are $j
 

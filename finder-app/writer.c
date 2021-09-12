@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <errno.h>
+#include <linux/limits.h>
 
 int main(int argc, char* argv[])
 {
@@ -23,7 +24,7 @@ int main(int argc, char* argv[])
 
 	char *path 	= argv[1];
 	char *writestr	= argv[2];
-	char openpath[200];
+	char openpath[PATH_MAX];
 
 	/* Open file to write */
 	int fd = open(path, O_CREAT | O_RDWR, S_IRWXU);
@@ -32,7 +33,7 @@ int main(int argc, char* argv[])
 	{
 		char *filename = basename(path);
 		char *dir  = dirname(path); 
-		char mdir[200];
+		char mdir[PATH_MAX];
 		int openerr = errno;
 		
 		/* If directory does not exist, make it (including parent directories) */
