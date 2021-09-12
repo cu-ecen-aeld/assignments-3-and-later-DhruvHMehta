@@ -131,7 +131,7 @@ make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="{OUTDIR}/root
 # TODO: Clean and build the writer utility
 
 echo "Cleaning and building writer"
-cd ${WRITER_PATH}
+cd ${FINDER_APP_DIR}
 make clean
 make CROSS_COMPILE=${CROSS_COMPILE}
 cp writer "${OUTDIR}/rootfs/home"
