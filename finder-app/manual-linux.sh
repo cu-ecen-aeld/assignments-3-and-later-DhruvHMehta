@@ -144,6 +144,7 @@ cp finder.sh "${OUTDIR}/rootfs/home"
 cp finder-test.sh "${OUTDIR}/rootfs/home"
 mkdir "${OUTDIR}/rootfs/home/conf"
 cp ../conf/username.txt "${OUTDIR}/rootfs/home/conf"
+cp autorun-qemu.sh "${OUTDIR}/rootfs/home"
 
 # TODO: Chown the root directory
 
