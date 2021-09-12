@@ -68,7 +68,7 @@ fi
 echo "Creating root file system"
 mkdir rootfs 
 cd rootfs
-mkdir bin dev etc home lib proc sbin sys tmp usr var
+mkdir bin dev etc home lib lib64 proc sbin sys tmp usr var
 mkdir usr/bin usr/lib usr/sbin
 mkdir -p var/log
 
@@ -108,14 +108,14 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 echo "Adding lib dependencies to rootfs/lib"
 export SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
-sudo	cp -a "${SYSROOT}/lib/ld-linux-aarch64.so.1" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/ld-2.31.so" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libm.so.6" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libm-2.31.so" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libresolv.so.2" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libresolv-2.31.so" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libc.so.6" "${OUTDIR}/rootfs/lib"
-sudo	cp -a "${SYSROOT}/lib64/libc-2.31.so" "${OUTDIR}/rootfs/lib"
+#sudo cp -L ${SYSROOT}/lib/ld-linux-aarch64.* ${OUTDIR}/rootfs/lib/
+#sudo cp -L ${SYSROOT}/lib64/libm.so.* :${OUTDIR}/rootfs/lib64/
+#sudo cp -L ${SYSROOT}/lib64/libresolv.so.* ${OUTDIR}/rootfs/lib64/
+#sudo cp -L ${SYSROOT}/lib64/libc.so.* ${OUTDIR}/rootfs/lib64/
+sudo	cp -aL "${SYSROOT}/lib/ld-linux-aarch64.so.1" "${OUTDIR}/rootfs/lib"
+sudo	cp -aL "${SYSROOT}/lib64/libm.so.6" "${OUTDIR}/rootfs/lib64"
+sudo	cp -aL "${SYSROOT}/lib64/libresolv.so.2" "${OUTDIR}/rootfs/lib64"
+sudo	cp -aL "${SYSROOT}/lib64/libc.so.6" "${OUTDIR}/rootfs/lib64"
 
 # TODO: Make device nodes
 
@@ -123,6 +123,10 @@ echo "Making device nodes"
 cd  ${OUTDIR}/rootfs
 sudo mknod -m 666 dev/null c 1 3
 sudo mknod -m 600 dev/console c 5 1
+
+echo "Installing modules"
+cd ${OUTDIR}/linux-stable
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="{OUTDIR}/rootfs" modules_install 
 
 # TODO: Clean and build the writer utility
 
@@ -146,6 +150,7 @@ cp ../conf/username.txt "${OUTDIR}/rootfs/home/conf"
 echo "Changing owner of rootfs to root"
 cd ${OUTDIR}/rootfs
 sudo chown -R root:root *
+sudo chown root:root ../rootfs
 
 # TODO: Create initramfs.cpio.gz
 
