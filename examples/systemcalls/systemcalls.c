@@ -1,4 +1,11 @@
 #include "systemcalls.h"
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <stdio.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +23,16 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success 
  *   or false() if it returned a failure
 */
+    int wstatus;
 
-    return true;
+    /* Execute system command and check return value */
+    wstatus = system(cmd);
+    WIFEXITED(wstatus);
+
+    if (wstatus == true)
+    	return true;
+
+    return false;
 }
 
 /**
@@ -47,7 +62,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,10 +73,48 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *   
 */
+    int status;
+    pid_t pid;
 
-    va_end(args);
+    /* Get pid of child */
+    pid = fork();
 
-    return true;
+    /* Fork failed */
+    if(pid == -1)
+	    return false;
+
+    /* In child process */
+    if(pid == 0)
+    {
+
+    	execv(command[0], command);
+
+	/* Unsuccessful execv call, return to parent */	
+	exit(EXIT_FAILURE);
+
+    }
+
+    if(pid > 0)
+    {    
+
+	    /* Wait for child process to terminate, check for error */
+	    if(waitpid(pid, &status, 0) == -1)
+		    return false;
+	  
+	   /* Program Executed successfully, check for exit status */
+	    else if(WIFEXITED(status) == true)
+	    {
+
+		if(WEXITSTATUS(status) != 0)
+			return false;
+
+		va_end(args);
+		return true;
+	    }
+
+    }
+    /* Should not reach here */
+    return false;
 }
 
 /**
@@ -93,7 +146,53 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   
 */
 
-    va_end(args);
+    int status;
+    pid_t pid;
     
-    return true;
+    int fd = open(outputfile, O_WRONLY|O_CREAT, 0644);
+    if(fd == -1)
+	return false;
+
+    /* Get pid of child */
+    pid = fork();
+
+    /* Fork failed */
+    if(pid == -1)
+	    return false;
+
+    /* In child process */
+    if(pid == 0)
+    {
+	if(dup2(fd,1) < 0)
+		perror("dup2");
+
+	close(fd);
+    	execv(command[0], command);
+
+	/* Unsuccessful execv call, return to parent */	
+	exit(EXIT_FAILURE);
+
+    }
+
+    if(pid > 0)
+    {    
+
+	    /* Wait for child process to terminate, check for error */
+	    if(waitpid(pid, &status, 0) == -1)
+		    return false;
+	  
+	   /* Program Executed successfully, check for exit status */
+	    else if(WIFEXITED(status) == true)
+	    {
+
+		if(WEXITSTATUS(status) != 0)
+			return false;
+
+		va_end(args);
+		return true;
+	    }
+
+    }
+    /* Should not reach here */
+    return false;
 }
