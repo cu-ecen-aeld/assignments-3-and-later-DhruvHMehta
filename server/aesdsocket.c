@@ -21,7 +21,8 @@
 /* File descriptor to write received data */
 int data_file;
 int socket_fd, client_fd;
-
+char *rxbuf;
+char *txbuf;
 static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
@@ -31,6 +32,8 @@ static void sighandler(int signo)
 		close(data_file);
 		close(client_fd);
 		close(socket_fd);
+		free(rxbuf);
+		free(txbuf);
 		exit(0);
 	}
 
@@ -43,14 +46,14 @@ int main()
 	struct sockaddr_in clientsockaddr;
 	socklen_t addrsize = sizeof(struct sockaddr);
 	int  recv_bytes;
-	char rxbuf[BUF_SIZE];
-	char txbuf[BUF_SIZE];
 	sigset_t new_set, old_set;
-//	int bufloc = 0;
-//	int bufcount = 1;
+	int bufloc = 0;
+	int bufcount = 1;
+	off_t filesize;
 
 	openlog(NULL, 0, LOG_USER);
 
+	/* Setting up signal handlers SIGINT and SIGTERM */
 	if(signal(SIGINT, sighandler) == SIG_ERR)
 	{
 		printf("Cannot handle SIGINT\n");
@@ -119,13 +122,25 @@ int main()
 		printf("open failed\n");
 		return -1;
 	}
+
+	/* For Signal Masking during recv and send */
 	sigemptyset(&new_set);
 	sigaddset(&new_set, SIGINT);
 	sigaddset(&new_set, SIGTERM);
 	
-//	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
-//		printf("malloc failed");
-		
+	/* Malloc for recieve buffer from recv and transmit buffer for send */
+	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+	{
+		printf("malloc failed");
+		return -1;
+	}	
+
+	if((txbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+	{
+		printf("malloc failed");
+		return -1;
+	}
+	
 	while(1)
 	{
 		/* Get the accepted client fd */
@@ -135,7 +150,7 @@ int main()
 		if(client_fd == -1)
 		{
 			printf("accept failed\n");
-			//free(rxbuf);
+			free(rxbuf);
 			return -1;
 		}
 
@@ -144,30 +159,30 @@ int main()
 		/* Log connection IP */
 		syslog(LOG_DEBUG, "Accepted connection from %s\n", IP);
 
+		/* Don't accept a signal while recieving data */
 		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
 			printf("sigprocmask failed\n");
-			
-		/* Receive data */
-		recv_bytes = recv(client_fd, rxbuf, BUF_SIZE - 1, 0);
-	
-		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
-			printf("sigprocmask failed\n");
 		
-
-/*
-		while((recv_bytes = recv(client_fd, rxbuf + bufloc, BUF_SIZE - 1, 0)) > 0)
+		/* Initially, write to starting of buffer */
+		bufloc = 0;	
+		
+		/* Receive data */
+		while((recv_bytes = recv(client_fd, rxbuf + bufloc, BUF_SIZE, 0)) > 0)
 		{
-			/ Error occurred in recv, log error /
+			/* Error occurred in recv, log error */
 			if(recv_bytes == -1)
 			{
 				printf("recv failed, %s\n", strerror(errno));
 				return -1;
 			}
-			
+
+			/* Detect newline character */
+			char* newlineloc = strchr(rxbuf, '\n');
+
 			bufloc = bufloc + recv_bytes;
 
-			/ Buffer size needs to be increased /
-			if((bufloc) > (BUF_SIZE - 1))
+			/* Buffer size needs to be increased */
+			if((bufloc) >= (bufcount * BUF_SIZE))
 			{
 				bufcount++;
 				char* newptr = realloc(rxbuf, bufcount*BUF_SIZE*sizeof(char));
@@ -176,29 +191,45 @@ int main()
 				{
 					free(rxbuf);
 					printf("Reallocation failed\n");
+					return -1;
 				}
 
 				else rxbuf = newptr;
 					
 			}
+
+			/* Newline exists, break out here */
+			else if (newlineloc != NULL)
+			       	break;
+			
 		}
-*/		
-		printf("Size of data = %d\n", recv_bytes);
-		rxbuf[recv_bytes] = '\0';
-
-		if(recv_bytes > 0)
-			printf("Received data is %s\n", rxbuf);
-
-		/* Write to file */
-		int wr_bytes = write(data_file, rxbuf, recv_bytes);
-
-		if(wr_bytes != recv_bytes)
-			printf("did not write completely remove this line\n");
 		
-		lseek(data_file, 0, SEEK_SET);
-		int fread_bytes = read(data_file, txbuf, BUF_SIZE);
+		/* Unmask pending signals */
+		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
+			printf("sigprocmask failed\n");
+		
+		/* Write to file */
+		int wr_bytes = write(data_file, rxbuf, bufloc);
 
-		printf("txbuf is %s\n", txbuf);
+		if(wr_bytes != bufloc)
+			syslog(LOG_ERR, "Bytes written to file do not match bytes recieved from connection\n");
+	
+		/* Find file size for reallocating write buffer */
+		filesize = lseek(data_file, 0, SEEK_CUR);
+		
+		char* newptr = realloc(txbuf, filesize*sizeof(char));
+		if(newptr == NULL)
+		{
+			free(txbuf);
+			printf("Reallocation failed\n");
+			return -1;
+		}
+
+		else txbuf = newptr;
+
+		/* Set position of file pointer to start for reading */
+		lseek(data_file, 0, SEEK_SET);
+		int fread_bytes = read(data_file, txbuf, filesize);
 
 		if(fread_bytes == -1)
 		{
@@ -206,18 +237,18 @@ int main()
 			return -1;
 		}
 
+		/* Mask off signals while sending data */
 		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
 			printf("sigprocmask failed\n");
 			
 		/* Send data read from file to client */
 		int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
 		
+		/* Unmask signals after data is sent */
 		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
 			printf("sigprocmask failed\n");
 		
-		if(sent_bytes > 0)
-			printf("Sent data is %s\n", txbuf);
-
+		/* Error in sending */
 		if(sent_bytes == -1)
 		{
 			printf("send failed\n");
