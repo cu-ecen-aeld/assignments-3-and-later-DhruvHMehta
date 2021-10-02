@@ -23,6 +23,9 @@ int data_file;
 int socket_fd, client_fd;
 char *rxbuf;
 char *txbuf;
+int startdaemon = 0;
+pid_t pid;
+
 static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
@@ -39,7 +42,7 @@ static void sighandler(int signo)
 
 }
 
-int main()
+int main(int argc, char* argv[])
 {
 	struct addrinfo hints;
 	struct addrinfo *sockaddrinfo;
@@ -64,6 +67,14 @@ int main()
 	{
 		printf("Cannot handle SIGTERM\n");
 		return -1;
+	}
+
+	if(argc == 2)
+	{
+		if(strcmp("-d", argv[1]) == 0)
+		{
+			startdaemon = 1;
+		}	
 	}
 
   	/* Create socket endpoint */ 
@@ -139,6 +150,26 @@ int main()
 	{
 		printf("malloc failed");
 		return -1;
+	}
+	
+	if(startdaemon)
+	{
+		pid = fork();
+		if(pid == -1)
+			return -1;
+
+		else if(pid != 0)
+			exit(0);
+
+		if(setsid() == -1)
+			return -1;
+
+		if(chdir("/") == -1)
+			return -1;
+
+		open("/dev/null", O_RDWR);
+		dup(0);
+		dup(0);
 	}
 	
 	while(1)
