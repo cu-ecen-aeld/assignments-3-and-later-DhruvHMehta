@@ -36,8 +36,10 @@ int main()
 	struct sockaddr_in clientsockaddr;
 	socklen_t addrsize = sizeof(struct sockaddr);
 	int  recv_bytes;
-	char *rxbuf;
+	char rxbuf[BUF_SIZE];
 	char txbuf[BUF_SIZE];
+//	int bufloc = 0;
+//	int bufcount = 1;
 
 	openlog(NULL, 0, LOG_USER);
 
@@ -101,8 +103,8 @@ int main()
 		return -1;
 	}
 
-	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
-			printf("malloc failed");
+	//if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+	//		printf("malloc failed");
 		
 	while(1)
 	{
@@ -112,8 +114,8 @@ int main()
 		/* Error occurred in accept, return -1 on error */
 		if(client_fd == -1)
 		{
-			printf("accept failed\n");i
-			free(rxbuf);
+			printf("accept failed\n");
+			//free(rxbuf);
 			return -1;
 		}
 
@@ -126,11 +128,41 @@ int main()
 		recv_bytes = recv(client_fd, rxbuf, BUF_SIZE - 1, 0);
 		
 		/* Error occurred in recv, log error */
-		if(recv_bytes == -1)
+			if(recv_bytes == -1)
+			{
+				printf("recv failed, %s\n", strerror(errno));
+				return -1;
+			}
+		/*
+		while((recv_bytes = recv(client_fd, rxbuf + bufloc, BUF_SIZE - 1, 0)) > 0)
 		{
-			printf("recv failed, %s\n", strerror(errno));
-			return -1;
+			/ Error occurred in recv, log error /
+			if(recv_bytes == -1)
+			{
+				printf("recv failed, %s\n", strerror(errno));
+				return -1;
+			}
+			
+			bufloc = bufloc + recv_bytes;
+
+			/ Buffer size needs to be increased /
+			if((bufloc) > (BUF_SIZE - 1))
+			{
+				bufcount++;
+				char* newptr = realloc(rxbuf, bufcount*BUF_SIZE*sizeof(char));
+
+				if(newptr == NULL)
+				{
+					free(rxbuf);
+					printf("Reallocation failed\n");
+				}
+
+				else rxbuf = newptr;
+					
+			}
 		}
+		*/
+		
 		
 		printf("Size of data = %d\n", recv_bytes);
 		rxbuf[recv_bytes] = '\0';
