@@ -18,19 +18,26 @@
 #define BUF_SIZE	100
 #define FILE_PATH	"/var/tmp/aesdsocketdata"
 
+/* File descriptor to write received data */
+int data_file;
+int socket_fd, client_fd;
+
 static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
 	{
 		syslog(LOG_DEBUG, "Caught signal, exiting\n");
 		remove(FILE_PATH);
+		close(data_file);
+		close(client_fd);
+		close(socket_fd);
 		exit(0);
 	}
 
 }
+
 int main()
 {
-  	int socket_fd, client_fd;
 	struct addrinfo hints;
 	struct addrinfo *sockaddrinfo;
 	struct sockaddr_in clientsockaddr;
@@ -38,6 +45,7 @@ int main()
 	int  recv_bytes;
 	char rxbuf[BUF_SIZE];
 	char txbuf[BUF_SIZE];
+	sigset_t new_set, old_set;
 //	int bufloc = 0;
 //	int bufcount = 1;
 
@@ -86,7 +94,7 @@ int main()
 	/* Error occurred in bind, return -1 on error */
 	if(rc == -1)
 	{
-		printf("bind failed\n");
+		printf("bind failed, %s\n", strerror(errno));
 		freeaddrinfo(sockaddrinfo);
 		return -1;
 	}
@@ -103,8 +111,20 @@ int main()
 		return -1;
 	}
 
-	//if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
-	//		printf("malloc failed");
+	/* Open file for writing */
+	data_file = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, S_IRWXU);
+
+	if(data_file == -1)
+	{
+		printf("open failed\n");
+		return -1;
+	}
+	sigemptyset(&new_set);
+	sigaddset(&new_set, SIGINT);
+	sigaddset(&new_set, SIGTERM);
+	
+//	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+//		printf("malloc failed");
 		
 	while(1)
 	{
@@ -124,16 +144,17 @@ int main()
 		/* Log connection IP */
 		syslog(LOG_DEBUG, "Accepted connection from %s\n", IP);
 
+		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
+			printf("sigprocmask failed\n");
+			
 		/* Receive data */
 		recv_bytes = recv(client_fd, rxbuf, BUF_SIZE - 1, 0);
+	
+		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
+			printf("sigprocmask failed\n");
 		
-		/* Error occurred in recv, log error */
-			if(recv_bytes == -1)
-			{
-				printf("recv failed, %s\n", strerror(errno));
-				return -1;
-			}
-		/*
+
+/*
 		while((recv_bytes = recv(client_fd, rxbuf + bufloc, BUF_SIZE - 1, 0)) > 0)
 		{
 			/ Error occurred in recv, log error /
@@ -161,23 +182,12 @@ int main()
 					
 			}
 		}
-		*/
-		
-		
+*/		
 		printf("Size of data = %d\n", recv_bytes);
 		rxbuf[recv_bytes] = '\0';
 
 		if(recv_bytes > 0)
 			printf("Received data is %s\n", rxbuf);
-
-		/* Open file for writing */
-		int data_file = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, S_IRWXU);
-
-		if(data_file == -1)
-		{
-			printf("open failed\n");
-			return -1;
-		}
 
 		/* Write to file */
 		int wr_bytes = write(data_file, rxbuf, recv_bytes);
@@ -196,10 +206,15 @@ int main()
 			return -1;
 		}
 
-
+		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
+			printf("sigprocmask failed\n");
+			
 		/* Send data read from file to client */
 		int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
-
+		
+		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
+			printf("sigprocmask failed\n");
+		
 		if(sent_bytes > 0)
 			printf("Sent data is %s\n", txbuf);
 
