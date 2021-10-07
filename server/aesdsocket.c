@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #define PORT 		"9000"
 #define BACKLOG		5
@@ -25,19 +26,17 @@ char *rxbuf;
 char *txbuf;
 int startdaemon = 0;
 pid_t pid;
+bool quitpgm = 0;
 
 static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
 	{
 		syslog(LOG_DEBUG, "Caught signal, exiting\n");
-		remove(FILE_PATH);
 		close(data_file);
 		close(client_fd);
 		close(socket_fd);
-		free(rxbuf);
-		free(txbuf);
-		exit(0);
+		quitpgm = 1;
 	}
 
 }
@@ -48,11 +47,10 @@ int main(int argc, char* argv[])
 	struct addrinfo *sockaddrinfo;
 	struct sockaddr_in clientsockaddr;
 	socklen_t addrsize = sizeof(struct sockaddr);
-	int  recv_bytes;
+	int  recv_bytes, fread_bytes;
 	sigset_t new_set, old_set;
 	int bufloc = 0;
 	int bufcount = 1;
-	off_t filesize;
 
 	openlog(NULL, 0, LOG_USER);
 
@@ -139,19 +137,7 @@ int main(int argc, char* argv[])
 	sigaddset(&new_set, SIGINT);
 	sigaddset(&new_set, SIGTERM);
 	
-	/* Malloc for recieve buffer from recv and transmit buffer for send */
-	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
-	{
-		printf("malloc failed");
-		return -1;
-	}	
 
-	if((txbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
-	{
-		printf("malloc failed");
-		return -1;
-	}
-	
 	if(startdaemon)
 	{
 		pid = fork();
@@ -172,11 +158,28 @@ int main(int argc, char* argv[])
 		dup(0);
 	}
 	
-	while(1)
+	while(!quitpgm)
 	{
+		/* Malloc for recieve buffer from recv and transmit buffer for send */
+		if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+		{
+			printf("malloc failed");
+			return -1;
+		}	
+
+		if((txbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
+		{
+			printf("malloc failed");
+			return -1;
+		}
+	
+
 		/* Get the accepted client fd */
 		client_fd = accept(socket_fd, (struct sockaddr *)&clientsockaddr, &addrsize); 
 
+		if(quitpgm)
+			break;
+		
 		/* Error occurred in accept, return -1 on error */
 		if(client_fd == -1)
 		{
@@ -210,6 +213,12 @@ int main(int argc, char* argv[])
 			/* Detect newline character */
 			char* newlineloc = strchr(rxbuf, '\n');
 
+			//if(newlineloc != NULL)
+			//{
+			//	int pos = newlineloc - (rxbuf + bufloc);
+			//	syslog(LOG_DEBUG, "pos = %d, bufloc = %d, recv_bytes = %d\n", pos, bufloc, recv_bytes);
+			//}
+		
 			bufloc = bufloc + recv_bytes;
 
 			/* Buffer size needs to be increased */
@@ -245,47 +254,35 @@ int main(int argc, char* argv[])
 		if(wr_bytes != bufloc)
 			syslog(LOG_ERR, "Bytes written to file do not match bytes recieved from connection\n");
 	
-		/* Find file size for reallocating write buffer */
-		filesize = lseek(data_file, 0, SEEK_CUR);
-		
-		char* newptr = realloc(txbuf, filesize*sizeof(char));
-		if(newptr == NULL)
-		{
-			free(txbuf);
-			printf("Reallocation failed\n");
-			return -1;
-		}
-
-		else txbuf = newptr;
-
 		/* Set position of file pointer to start for reading */
 		lseek(data_file, 0, SEEK_SET);
-		int fread_bytes = read(data_file, txbuf, filesize);
-
-		if(fread_bytes == -1)
+		
+		while((fread_bytes = read(data_file, txbuf, BUF_SIZE*sizeof(char))) > 0)
 		{
-			printf("read failed\n");
-			return -1;
-		}
+			if(fread_bytes == -1)
+			{
+				printf("read failed\n");
+				return -1;
+			}
 
-		/* Mask off signals while sending data */
-		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
-			printf("sigprocmask failed\n");
+			/* Mask off signals while sending data */
+			if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
+				printf("sigprocmask failed\n");
+				
+			/* Send data read from file to client */
+			int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
 			
-		/* Send data read from file to client */
-		int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
-		
-		/* Unmask signals after data is sent */
-		if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
-			printf("sigprocmask failed\n");
-		
-		/* Error in sending */
-		if(sent_bytes == -1)
-		{
-			printf("send failed\n");
-			return -1;
+			/* Unmask signals after data is sent */
+			if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
+				printf("sigprocmask failed\n");
+			
+			/* Error in sending */
+			if(sent_bytes == -1)
+			{
+				printf("send failed\n");
+				return -1;
+			}
 		}
-
 		/* Close connection */
 		close(client_fd);
 
@@ -296,9 +293,14 @@ int main(int argc, char* argv[])
 		}
 
 		syslog(LOG_DEBUG, "Closed connection from %s\n", IP);
+		free(rxbuf);
+		free(txbuf);
 
 	}
 
-
+	remove(FILE_PATH);
+	free(rxbuf);
+	free(txbuf);
+	
 	return 0;
 }
