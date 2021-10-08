@@ -33,9 +33,10 @@ static void sighandler(int signo)
 	if((signo == SIGINT) || (signo == SIGTERM))
 	{
 		syslog(LOG_DEBUG, "Caught signal, exiting\n");
-		close(data_file);
-		close(client_fd);
-		close(socket_fd);
+		if(shutdown(socket_fd, SHUT_RDWR))
+		{
+			perror("Failed on shutdown()");
+		}
 		quitpgm = 1;
 	}
 
@@ -193,6 +194,7 @@ int main(int argc, char* argv[])
 		/* Log connection IP */
 		syslog(LOG_DEBUG, "Accepted connection from %s\n", IP);
 
+
 		/* Don't accept a signal while recieving data */
 		if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
 			printf("sigprocmask failed\n");
@@ -298,6 +300,9 @@ int main(int argc, char* argv[])
 
 	}
 
+	close(data_file);
+	close(client_fd);
+	close(socket_fd);
 	remove(FILE_PATH);
 	free(rxbuf);
 	free(txbuf);
