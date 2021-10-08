@@ -52,6 +52,7 @@ int main(int argc, char* argv[])
 	sigset_t new_set, old_set;
 	int bufloc = 0;
 	int bufcount = 1;
+	int opt = 1;
 
 	openlog(NULL, 0, LOG_USER);
 
@@ -85,6 +86,13 @@ int main(int argc, char* argv[])
 		printf("Socket creation failed\n");
 		return -1;
 	}
+
+	 /* Forcefully attaching socket to the port 9000 for bind error: address in use */
+    	if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+    	{
+       		 perror("setsockopt");
+       	 	exit(EXIT_FAILURE);
+    	}
 
 	/* Setting this for use with getaddrinfo for bind() */
 	hints.ai_family = PF_INET;
@@ -215,11 +223,19 @@ int main(int argc, char* argv[])
 			/* Detect newline character */
 			char* newlineloc = strchr(rxbuf, '\n');
 
-			//if(newlineloc != NULL)
-			//{
-			//	int pos = newlineloc - (rxbuf + bufloc);
-			//	syslog(LOG_DEBUG, "pos = %d, bufloc = %d, recv_bytes = %d\n", pos, bufloc, recv_bytes);
-			//}
+			if(newlineloc != NULL)
+			{
+				/* Find the array index of the newline */
+				int pos = newlineloc - (rxbuf + bufloc);
+
+				/* If the newline is found outside the buffer bounds,
+				 * ignore it   */
+				if(pos < BUF_SIZE)
+				{
+					//syslog(LOG_DEBUG, "pos = %d, bufloc = %d\n", pos, bufloc);
+					recv_bytes = pos + 1;
+				}
+			}
 		
 			bufloc = bufloc + recv_bytes;
 
@@ -258,7 +274,7 @@ int main(int argc, char* argv[])
 	
 		/* Set position of file pointer to start for reading */
 		lseek(data_file, 0, SEEK_SET);
-		
+
 		while((fread_bytes = read(data_file, txbuf, BUF_SIZE*sizeof(char))) > 0)
 		{
 			if(fread_bytes == -1)
@@ -266,24 +282,25 @@ int main(int argc, char* argv[])
 				printf("read failed\n");
 				return -1;
 			}
-
+			
 			/* Mask off signals while sending data */
 			if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
 				printf("sigprocmask failed\n");
-				
+			
 			/* Send data read from file to client */
 			int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
-			
+		
 			/* Unmask signals after data is sent */
 			if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
 				printf("sigprocmask failed\n");
-			
+		
 			/* Error in sending */
 			if(sent_bytes == -1)
 			{
 				printf("send failed\n");
 				return -1;
 			}
+	
 		}
 		/* Close connection */
 		close(client_fd);
