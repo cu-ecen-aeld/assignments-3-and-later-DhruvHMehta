@@ -50,9 +50,11 @@ int main(int argc, char* argv[])
 	socklen_t addrsize = sizeof(struct sockaddr);
 	int  recv_bytes, fread_bytes;
 	sigset_t new_set, old_set;
-	int bufloc = 0;
-	int bufcount = 1;
+	int bufloc = 0, wrbufloc = 0;
+	int bufcount = 1, wrbufcount = 1;
+	int wroffset = 0;
 	int opt = 1;
+	char rd_byte;
 
 	openlog(NULL, 0, LOG_USER);
 
@@ -275,32 +277,57 @@ int main(int argc, char* argv[])
 		/* Set position of file pointer to start for reading */
 		lseek(data_file, 0, SEEK_SET);
 
-		while((fread_bytes = read(data_file, txbuf, BUF_SIZE*sizeof(char))) > 0)
+		wrbufloc = 0;
+		wroffset = 0;
+
+		while((fread_bytes = read(data_file, &rd_byte, sizeof(char))) > 0)
 		{
 			if(fread_bytes == -1)
 			{
 				printf("read failed\n");
 				return -1;
 			}
+
+			txbuf[wrbufloc] = rd_byte;
+
+			if(txbuf[wrbufloc] == '\n')
+			{	
+				/* Mask off signals while sending data */
+				if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
+					printf("sigprocmask failed\n");
+				
+				/* Send data read from file to client */
+				int sent_bytes = send(client_fd, (txbuf + wroffset), (wrbufloc - wroffset + 1), 0);
+				wroffset = (wrbufloc + 1);
+
+				/* Unmask signals after data is sent */
+				if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
+					printf("sigprocmask failed\n");
 			
-			/* Mask off signals while sending data */
-			if((rc = sigprocmask(SIG_BLOCK, &new_set, &old_set)) == -1)
-				printf("sigprocmask failed\n");
-			
-			/* Send data read from file to client */
-			int sent_bytes = send(client_fd, txbuf, fread_bytes, 0);
-		
-			/* Unmask signals after data is sent */
-			if((rc = sigprocmask(SIG_UNBLOCK, &old_set, NULL)) == -1)
-				printf("sigprocmask failed\n");
-		
-			/* Error in sending */
-			if(sent_bytes == -1)
-			{
-				printf("send failed\n");
-				return -1;
+				/* Error in sending */
+				if(sent_bytes == -1)
+				{
+					printf("send failed\n");
+					return -1;
+				}
 			}
-	
+
+			wrbufloc++;
+
+			if(wrbufloc == (wrbufcount * BUF_SIZE))
+			{	wrbufcount++;
+				char* newptr = realloc(txbuf, wrbufcount*BUF_SIZE*sizeof(char));
+
+				if(newptr == NULL)
+				{
+					free(txbuf);
+					printf("Reallocation failed\n");
+					return -1;
+				}
+
+				else txbuf = newptr;
+			}
+				
 		}
 		/* Close connection */
 		close(client_fd);
