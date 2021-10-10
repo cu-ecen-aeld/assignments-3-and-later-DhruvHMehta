@@ -6,6 +6,9 @@
 *	Code References: https://beej.us/guide/bgnet/html/
 *	Beej's Guide to Network Programming
 *
+*	https://github.com/cu-ecen-aeld/aesd-lectures/blob/master/lecture9/timer_thread.c
+*	Timer Thread Example Code from Aesd-assignments repo
+*
 *	https://github.com/stockrt/queue.h/blob/master/sample.c
 *	Used for understanding the usage of Singly Linked List from queue.h
 *
@@ -28,6 +31,7 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include <time.h>
+#include <signal.h>
 
 #define PORT 		"9000"
 #define BACKLOG		5
@@ -55,6 +59,22 @@ struct slist_data_s
 	SLIST_ENTRY(slist_data_s) entries;
 };
 
+struct timethreadp
+{
+	int data_file;
+};
+
+static inline void timespec_add( struct timespec *result,
+                        const struct timespec *ts_1, const struct timespec *ts_2)
+{
+    result->tv_sec = ts_1->tv_sec + ts_2->tv_sec;
+    result->tv_nsec = ts_1->tv_nsec + ts_2->tv_nsec;
+    if( result->tv_nsec > 1000000000L ) {
+        result->tv_nsec -= 1000000000L;
+        result->tv_sec ++;
+    }
+}
+
 static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
@@ -66,6 +86,54 @@ static void sighandler(int signo)
 		}
 		quitpgm = 1;
 	}
+
+}
+
+static void timer_thread(union sigval sigval)
+{
+	int str_byte;
+	char *str = malloc(BUF_SIZE*sizeof(char));
+	if(str == NULL)
+	{
+		perror("Malloc failed\n");
+		return;
+	}
+
+	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
+
+	time_t cur_time = time(NULL);
+	
+	/* Get time in broken-down struct */
+	struct tm *br_time = localtime(&cur_time);
+
+	/* Get the formatted string as per requirements in str */	
+	if((str_byte = strftime(str, BUF_SIZE, "timestamp:%Y %b %a %d %H %M %S%n", br_time)) == 0)
+	{
+		perror("strftime failed\n");
+		free(str);
+		return;
+	}	
+
+	if(pthread_mutex_lock(&file_mutex) != 0)
+	{
+		perror("Mutex lock failed\n");
+		free(str);
+		return;
+	}
+
+	/* Write the timestamp to file */
+	int t_wr_bytes = write(td->data_file, str, str_byte);
+	if(t_wr_bytes != str_byte)
+		syslog(LOG_ERR,"error in writing timestamp to file\n");
+	
+	if(pthread_mutex_unlock(&file_mutex) != 0)
+	{
+		perror("Mutex unlock failed\n");
+		free(str);
+		return;
+	}
+	
+	free(str);
 
 }
 
@@ -266,8 +334,15 @@ int main(int argc, char* argv[])
 	int client_fd, data_file; 
 	int threadid = 0;	
 	struct slist_data_s *node = NULL;
+   	struct sigevent sev;	
+	timer_t timerid;
+	int clock_id = CLOCK_MONOTONIC;
+	struct timespec start_time;
+	struct itimerspec itimerspec;	
+	struct timethreadp ttp;
 
 	memset(&hints, 0, sizeof(hints));
+	memset(&sev,0,sizeof(struct sigevent));
 
 	SLIST_HEAD(slisthead, slist_data_s) head;
 	SLIST_INIT(&head);
@@ -325,7 +400,6 @@ int main(int argc, char* argv[])
 		freeaddrinfo(sockaddrinfo);
 		return -1;
 	}
-	printf("Bind here");
 	/* Bind */
 	rc = bind(socket_fd, sockaddrinfo->ai_addr, sizeof(struct sockaddr));
 
@@ -379,6 +453,43 @@ int main(int argc, char* argv[])
 		open("/dev/null", O_RDWR);
 		dup(0);
 		dup(0);
+
+	}
+
+	if((startdaemon == 0) || (pid == 0))
+	{
+		/* Code referenced from link in File Header
+		 * Code to run a thread on expiration of 
+		 *  a timer  */
+		ttp.data_file = data_file;
+
+		sev.sigev_notify = SIGEV_THREAD;
+		sev.sigev_value.sival_ptr = &ttp;
+		sev.sigev_notify_function = timer_thread;
+
+		/* Create per-process timer with MONOTONIC Clock */
+		if ( timer_create(clock_id, &sev, &timerid) != 0 ) 
+		{
+		    printf("Error %d (%s) creating timer!\n", errno, strerror(errno));
+		}
+
+		/* Get current time */
+		if ( clock_gettime(clock_id, &start_time) != 0 )
+		{
+			printf("Error %d (%s) getting clock %d time\n",errno,strerror(errno),clock_id);
+		}
+
+		/* Set timer expiration to 10s + 1mS (to make sure system tick is complete) */
+		itimerspec.it_interval.tv_sec = 10;
+		itimerspec.it_interval.tv_nsec = 1000000;
+
+		timespec_add(&itimerspec.it_value, &start_time, &itimerspec.it_interval);
+
+		/* Arm the timer for the absolute time specified in itimerspec */	
+		if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
+		{
+		    printf("Error %d (%s) setting timer\n",errno,strerror(errno));
+		}
 	}
 	
 	while(!quitpgm)
@@ -427,6 +538,13 @@ int main(int argc, char* argv[])
 	close(client_fd);
 	close(socket_fd);
 	remove(FILE_PATH);
+
+	 while (!SLIST_EMPTY(&head))
+ 	{
+		node = SLIST_FIRST(&head);
+		SLIST_REMOVE_HEAD(&head, entries);
+		free(node);
+    	}
 	
 	return 0;
 
