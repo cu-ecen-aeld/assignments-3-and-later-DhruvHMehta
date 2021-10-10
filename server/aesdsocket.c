@@ -96,7 +96,7 @@ static void timer_thread(union sigval sigval)
 	if(str == NULL)
 	{
 		perror("Malloc failed\n");
-		return;
+		pthread_exit(NULL);
 	}
 
 	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
@@ -107,18 +107,18 @@ static void timer_thread(union sigval sigval)
 	struct tm *br_time = localtime(&cur_time);
 
 	/* Get the formatted string as per requirements in str */	
-	if((str_byte = strftime(str, BUF_SIZE, "timestamp:%Y %b %a %d %H %M %S%n", br_time)) == 0)
+	if((str_byte = strftime(str, BUF_SIZE, "timestamp:%Y %b %a %d %H:%M:%S%n", br_time)) == 0)
 	{
 		perror("strftime failed\n");
 		free(str);
-		return;
+		pthread_exit(NULL);
 	}	
 
 	if(pthread_mutex_lock(&file_mutex) != 0)
 	{
 		perror("Mutex lock failed\n");
 		free(str);
-		return;
+		pthread_exit(NULL);
 	}
 
 	/* Write the timestamp to file */
@@ -130,7 +130,7 @@ static void timer_thread(union sigval sigval)
 	{
 		perror("Mutex unlock failed\n");
 		free(str);
-		return;
+		pthread_exit(NULL);
 	}
 	
 	free(str);
@@ -162,6 +162,7 @@ void* TxRxData(void *thread_param)
 	if((txbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
 	{
 		perror("malloc failed");
+		free(rxbuf);
 		pthread_exit(l_threadp);
 	}
 
@@ -184,6 +185,8 @@ void* TxRxData(void *thread_param)
 		if(recv_bytes == -1)
 		{
 			printf("recv failed, %s\n", strerror(errno));
+			free(rxbuf);
+			free(txbuf);
 			pthread_exit(l_threadp);
 		}
 
@@ -215,6 +218,7 @@ void* TxRxData(void *thread_param)
 			if(newptr == NULL)
 			{
 				free(rxbuf);
+				free(txbuf);
 				printf("Reallocation failed\n");
 				pthread_exit(l_threadp);
 			}
@@ -240,7 +244,13 @@ void* TxRxData(void *thread_param)
 	if(wr_bytes != bufloc)
 		syslog(LOG_ERR, "Bytes written to file do not match bytes recieved from connection\n");
 
-	pthread_mutex_lock(&file_mutex);
+	if((pthread_mutex_lock(&file_mutex)) != 0)
+	{
+		perror("Mutex lock failed\n");
+		free(rxbuf);
+		free(txbuf);
+		pthread_exit(l_threadp);
+	}
 	/* Set position of file pointer to start for reading */
 	lseek(l_threadp->t_data_file, 0, SEEK_SET);
 
@@ -251,8 +261,18 @@ void* TxRxData(void *thread_param)
 		if(fread_bytes == -1)
 		{
 			perror("read failed\n");
+			free(rxbuf);
+			free(txbuf);
 			pthread_exit(l_threadp);
 		}
+
+		if((pthread_mutex_unlock(&file_mutex) != 0))
+		{
+			perror("Mutex unlock failed\n");
+			free(rxbuf);
+			free(txbuf);
+			pthread_exit(l_threadp);
+		}	
 
 		/* Add a byte to the string */
 		txbuf[wrbufloc] = rd_byte;
@@ -275,6 +295,8 @@ void* TxRxData(void *thread_param)
 			if(sent_bytes == -1)
 			{
 				perror("send failed\n");
+				free(rxbuf);
+				free(txbuf);
 				pthread_exit(l_threadp);
 			}
 
@@ -292,6 +314,7 @@ void* TxRxData(void *thread_param)
 
 			if(newptr == NULL)
 			{
+				free(rxbuf);
 				free(txbuf);
 				perror("Reallocation failed\n");
 				pthread_exit(l_threadp);
@@ -299,15 +322,32 @@ void* TxRxData(void *thread_param)
 
 			else txbuf = newptr;
 		}
-			
-	}
 
-	pthread_mutex_unlock(&file_mutex);
+		if((pthread_mutex_lock(&file_mutex)) != 0)
+		{
+			perror("Mutex lock failed\n");
+			free(rxbuf);
+			free(txbuf);
+			pthread_exit(l_threadp);
+		}
+	
+	}
+	
+	if((pthread_mutex_unlock(&file_mutex)) != 0)
+	{
+		perror("Mutex unlock failed\n");
+		free(rxbuf);
+		free(txbuf);
+		pthread_exit(l_threadp);
+	}
+	
 	/* Close connection */
 	close(l_threadp->t_client_fd);
 
 	if(l_threadp->t_client_fd == -1)
 	{
+		free(rxbuf);
+		free(txbuf);
 		printf("close failed\n");
 		pthread_exit(l_threadp);
 	}
@@ -384,8 +424,8 @@ int main(int argc, char* argv[])
     	if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
     	{
        		 perror("setsockopt");
-       	 	exit(EXIT_FAILURE);
-    	}
+		 goto cleanexit;    
+	}
 
 	/* Setting this for use with getaddrinfo for bind() */
 	hints.ai_family = PF_INET;
@@ -398,7 +438,7 @@ int main(int argc, char* argv[])
 	{
 		printf("getaddrinfo failed, %s\n", gai_strerror(rc));
 		freeaddrinfo(sockaddrinfo);
-		return -1;
+		goto cleanexit;
 	}
 	/* Bind */
 	rc = bind(socket_fd, sockaddrinfo->ai_addr, sizeof(struct sockaddr));
@@ -408,7 +448,7 @@ int main(int argc, char* argv[])
 	{
 		printf("bind failed, %s\n", strerror(errno));
 		freeaddrinfo(sockaddrinfo);
-		return -1;
+		goto cleanexit;
 	}
 
 	freeaddrinfo(sockaddrinfo);
@@ -419,8 +459,8 @@ int main(int argc, char* argv[])
 	/* Error occurred in listen, return -1 on error */
 	if(rc == -1)
 	{
-		printf("listen failed\n");
-		return -1;
+		perror("listen failed\n");
+		goto cleanexit;
 	}
 
 	/* Open file for writing */
@@ -428,8 +468,8 @@ int main(int argc, char* argv[])
 
 	if(data_file == -1)
 	{
-		printf("open failed\n");
-		return -1;
+		perror("open failed\n");
+		goto cleanexit;
 	}
 
 	/* Initialize mutex */
@@ -439,16 +479,16 @@ int main(int argc, char* argv[])
 	{
 		pid = fork();
 		if(pid == -1)
-			return -1;
+			goto cleanexit;
 
 		else if(pid != 0)
 			exit(0);
 
 		if(setsid() == -1)
-			return -1;
+			goto cleanexit;
 
 		if(chdir("/") == -1)
-			return -1;
+			goto cleanexit;
 
 		open("/dev/null", O_RDWR);
 		dup(0);
@@ -505,7 +545,7 @@ int main(int argc, char* argv[])
 		if(client_fd == -1)
 		{
 			perror("accept failed\n");
-			return -1;
+			goto cleanexit;
 		}
 		
 		/* sockaddr to IP string */
@@ -533,7 +573,8 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
-	
+
+cleanexit:	
 	close(data_file);
 	close(client_fd);
 	close(socket_fd);
