@@ -96,7 +96,7 @@ static void timer_thread(union sigval sigval)
 	if(str == NULL)
 	{
 		perror("Malloc failed\n");
-		pthread_exit(NULL);
+	//	pthread_exit(NULL);
 	}
 
 	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
@@ -111,14 +111,14 @@ static void timer_thread(union sigval sigval)
 	{
 		perror("strftime failed\n");
 		free(str);
-		pthread_exit(NULL);
+	//	pthread_exit(NULL);
 	}	
 
 	if(pthread_mutex_lock(&file_mutex) != 0)
 	{
 		perror("Mutex lock failed\n");
 		free(str);
-		pthread_exit(NULL);
+	//	pthread_exit(NULL);
 	}
 
 	/* Write the timestamp to file */
@@ -130,7 +130,7 @@ static void timer_thread(union sigval sigval)
 	{
 		perror("Mutex unlock failed\n");
 		free(str);
-		pthread_exit(NULL);
+	//	pthread_exit(NULL);
 	}
 	
 	free(str);
@@ -156,14 +156,14 @@ void* TxRxData(void *thread_param)
 	if((rxbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
 	{
 		perror("malloc failed");
-		pthread_exit(l_threadp);
+		//pthread_exit(l_threadp);
 	}	
 
 	if((txbuf = (char *)malloc(BUF_SIZE*sizeof(char))) == NULL)
 	{
 		perror("malloc failed");
 		free(rxbuf);
-		pthread_exit(l_threadp);
+		//pthread_exit(l_threadp);
 	}
 
 	/* For Signal Masking during recv and send */
@@ -187,7 +187,7 @@ void* TxRxData(void *thread_param)
 			printf("recv failed, %s\n", strerror(errno));
 			free(rxbuf);
 			free(txbuf);
-			pthread_exit(l_threadp);
+			//pthread_exit(l_threadp);
 		}
 
 		/* Detect newline character */
@@ -220,7 +220,7 @@ void* TxRxData(void *thread_param)
 				free(rxbuf);
 				free(txbuf);
 				printf("Reallocation failed\n");
-				pthread_exit(l_threadp);
+				//pthread_exit(l_threadp);
 			}
 
 			else rxbuf = newptr;
@@ -249,7 +249,7 @@ void* TxRxData(void *thread_param)
 		perror("Mutex lock failed\n");
 		free(rxbuf);
 		free(txbuf);
-		pthread_exit(l_threadp);
+		//pthread_exit(l_threadp);
 	}
 	/* Set position of file pointer to start for reading */
 	lseek(l_threadp->t_data_file, 0, SEEK_SET);
@@ -263,7 +263,7 @@ void* TxRxData(void *thread_param)
 			perror("read failed\n");
 			free(rxbuf);
 			free(txbuf);
-			pthread_exit(l_threadp);
+			//pthread_exit(l_threadp);
 		}
 
 		if((pthread_mutex_unlock(&file_mutex) != 0))
@@ -271,7 +271,7 @@ void* TxRxData(void *thread_param)
 			perror("Mutex unlock failed\n");
 			free(rxbuf);
 			free(txbuf);
-			pthread_exit(l_threadp);
+			//pthread_exit(l_threadp);
 		}	
 
 		/* Add a byte to the string */
@@ -297,7 +297,7 @@ void* TxRxData(void *thread_param)
 				perror("send failed\n");
 				free(rxbuf);
 				free(txbuf);
-				pthread_exit(l_threadp);
+				//pthread_exit(l_threadp);
 			}
 
 			/* wrbufloc has to start at 0 at the line below */
@@ -317,7 +317,7 @@ void* TxRxData(void *thread_param)
 				free(rxbuf);
 				free(txbuf);
 				perror("Reallocation failed\n");
-				pthread_exit(l_threadp);
+				//pthread_exit(l_threadp);
 			}
 
 			else txbuf = newptr;
@@ -328,7 +328,7 @@ void* TxRxData(void *thread_param)
 			perror("Mutex lock failed\n");
 			free(rxbuf);
 			free(txbuf);
-			pthread_exit(l_threadp);
+			//pthread_exit(l_threadp);
 		}
 	
 	}
@@ -338,7 +338,7 @@ void* TxRxData(void *thread_param)
 		perror("Mutex unlock failed\n");
 		free(rxbuf);
 		free(txbuf);
-		pthread_exit(l_threadp);
+		//pthread_exit(l_threadp);
 	}
 	
 	/* Close connection */
@@ -349,7 +349,7 @@ void* TxRxData(void *thread_param)
 		free(rxbuf);
 		free(txbuf);
 		printf("close failed\n");
-		pthread_exit(l_threadp);
+	//	pthread_exit(l_threadp);
 	}
 
 	syslog(LOG_DEBUG, "Closed connection from %s\n", l_threadp->t_IP);
@@ -357,7 +357,7 @@ void* TxRxData(void *thread_param)
 	free(txbuf);
 
 	l_threadp->t_is_complete = true; 
-	pthread_exit(l_threadp);
+	pthread_exit(NULL);
 
 } // TxRxThread end
 
