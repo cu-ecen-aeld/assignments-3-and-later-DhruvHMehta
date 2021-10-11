@@ -357,7 +357,9 @@ void* TxRxData(void *thread_param)
 	free(txbuf);
 
 	l_threadp->t_is_complete = true; 
-	pthread_exit(NULL);
+	
+	return NULL;
+	//pthread_exit(NULL);
 
 } // TxRxThread end
 
