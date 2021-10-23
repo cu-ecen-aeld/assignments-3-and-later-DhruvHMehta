@@ -18,20 +18,30 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+
+#include <linux/slab.h> // kmalloc
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Your Name Here"); /** TODO: fill in your name **/
+MODULE_AUTHOR("Dhruv"); /** TODO: fill in your name **/
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
-	PDEBUG("open");
+    struct aesd_dev *dev;
+	
+    PDEBUG("open");
 	/**
 	 * TODO: handle open
 	 */
+
+    /* Obtain aesd device info from inode and cdev */
+    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+
+    /* Store the dev obtained into the filp->private_data */
+    filp->private_data = dev;
 	return 0;
 }
 
@@ -59,10 +69,35 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	ssize_t retval = -ENOMEM;
+    char *kbuf = NULL;
+    unsigned long cfu_return;
+    struct aesd_dev *dev = (struct aesd_dev *)(filp->private_data);
+
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle write
 	 */
+    
+    /* Allocate requested memory in kernel buffer first */
+    kbuf = kmalloc(count, GFP_KERNEL);
+    if(kbuf == NULL)
+        return retval;
+
+    /* Copy the user-space buffer into the kbuf */
+    cfu_return = copy_from_user(kbuf, buf, count);
+    if(cfu_return != 0)
+        PDEBUG("copy_from_user could not copy %lu bytes from user", cfu_return);
+
+    /* Copy the kbuf ptr and size to the buffptr in the circular buffer */
+    dev->aesd_actual_buffer.buffptr = kbuf;
+    dev->aesd_actual_buffer.size   = count;
+
+    /* Add it to the circular buffer */
+    aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
+                                   &(dev->aesd_actual_buffer)); 
+
+    
+
 	return retval;
 }
 struct file_operations aesd_fops = {
@@ -105,7 +140,7 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
-
+    aesd_circular_buffer_init(&(aesd_device.aesd_circ_buffer));
 	result = aesd_setup_cdev(&aesd_device);
 
 	if( result ) {
@@ -127,8 +162,6 @@ void aesd_cleanup_module(void)
 
 	unregister_chrdev_region(devno, 1);
 }
-
-
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
