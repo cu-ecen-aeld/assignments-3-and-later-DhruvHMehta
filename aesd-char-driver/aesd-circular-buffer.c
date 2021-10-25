@@ -10,11 +10,27 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <linux/kernel.h>
 #else
 #include <string.h>
 #endif
 
 #include "aesd-circular-buffer.h"
+
+#define CB_DEBUG 1  //Remove comment on this line to enable debug
+
+#undef PDE1BUG             /* undef it, just in case */
+#ifdef CB_DEBUG
+#  ifdef __KERNEL__
+     /* This one if debugging is on, and kernel space */
+#    define PDE1BUG(fmt, args...) printk( KERN_DEBUG "aesdchar: " fmt, ## args)
+#  else
+     /* This one for user space */
+#    define PDE1BUG(fmt, args...) fprintf(stderr, fmt, ## args)
+#  endif
+#else
+#  define PDE1BUG(fmt, args...) /* not debugging: nothing */
+#endif
 
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
@@ -42,24 +58,26 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     int buffer_count  = buffer->out_offs;
     size_t last_pos   = 0;
 
+    PDE1BUG("charoff from cb = %ld, retptr = %p", char_offset, (void *) &buffer->entry[buffer_count]);    
     while(char_offset > (char_count - 1))
     { 
         last_pos     = char_count; 
         buffer_count = (buffer_count + 1) % (AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED);
-
+        PDE1BUG("1");
         /* Searched all entries and wrapped around, the char_offset exceeds the last byte */
         if(buffer_count == buffer->out_offs)
             return NULL;
-
+        PDE1BUG("2");
         char_count  += (buffer->entry[buffer_count]).size;
     }
-    
+
     if(char_offset <= (char_count - 1))
     {
+        PDE1BUG("3");
         *entry_offset_byte_rtn = char_offset - last_pos;
         return &buffer->entry[buffer_count];
     }
-    
+    PDE1BUG("4");
     return NULL;
 }
 
