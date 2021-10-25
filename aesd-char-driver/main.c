@@ -65,8 +65,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     size_t offset_byte;
     unsigned long ctu_return;
     size_t char_offset;
-    size_t out_offs_count = 0;
-    size_t total_size = dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size;
+    size_t out_offs_count = 1;
+    uint8_t out_offs = dev->aesd_circ_buffer.out_offs;
+    size_t total_size = dev->aesd_circ_buffer.entry[out_offs].size;
     size_t buf_size = *f_pos;
 
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
@@ -75,20 +76,19 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	 */
     
     /* Restrict reads to only the size of a single aesd_buffer_entry */
-    if(count > (dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size))
-        count = dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size;
+    if(count > (dev->aesd_circ_buffer.entry[out_offs].size))
+        count = dev->aesd_circ_buffer.entry[out_offs].size;
 
     while(*f_pos >= total_size)
     {
-        if(out_offs_count == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1)
+        if(((out_offs_count + out_offs) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) == out_offs)
         {
             retval = 0;
             return retval;
         }
-        out_offs_count++;
        // PDEBUG("Total_size = %ld", total_size);
-        total_size += dev->aesd_circ_buffer.entry[(dev->aesd_circ_buffer.out_offs) + out_offs_count].size;
-
+        total_size += dev->aesd_circ_buffer.entry[out_offs + out_offs_count].size;
+        out_offs_count++;
     }
 
     char_offset = total_size - 1;
