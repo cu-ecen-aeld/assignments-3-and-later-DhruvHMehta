@@ -42,7 +42,8 @@ int aesd_open(struct inode *inode, struct file *filp)
 
     /* Store the dev obtained into the filp->private_data */
     filp->private_data = dev;
-	return 0;
+	//PDEBUG("devptr = %p", (void *)dev);
+    return 0;
 }
 
 int aesd_release(struct inode *inode, struct file *filp)
@@ -58,10 +59,32 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	ssize_t retval = 0;
+    struct aesd_dev *dev = (struct aesd_dev *)(filp->private_data);
+    char *kbuf = NULL;
+    struct aesd_buffer_entry *buffer_read_last;
+    size_t offset_byte;
+    unsigned long ctu_return;
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle read
 	 */
+    
+    /* Restrict reads to only the size of a single aesd_buffer_entry */
+    if(count > (dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size))
+        count = dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size;
+
+    /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
+     buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
+             *f_pos + count, &offset_byte);
+
+    /* Update fpos and kbuf ptr */
+    *f_pos += offset_byte;
+    kbuf = (char *)buffer_read_last->buffptr;
+
+    /* Copy kbuf to user-space buffer */
+    ctu_return = copy_to_user(buf, kbuf, count);
+
+    retval = count;
 	return retval;
 }
 
@@ -96,8 +119,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
                                    &(dev->aesd_actual_buffer)); 
 
-    
-
+    retval = count;
 	return retval;
 }
 struct file_operations aesd_fops = {
@@ -136,7 +158,7 @@ int aesd_init_module(void)
 		return result;
 	}
 	memset(&aesd_device,0,sizeof(struct aesd_dev));
-
+    //PDEBUG("globalptr = %p\n", (void *)&aesd_device);
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
@@ -153,12 +175,15 @@ int aesd_init_module(void)
 void aesd_cleanup_module(void)
 {
 	dev_t devno = MKDEV(aesd_major, aesd_minor);
+    //int index = 0;
 
 	cdev_del(&aesd_device.cdev);
-
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
+     //AESD_CIRCULAR_BUFFER_FOREACH(&(aesd_device.aesd_actual_buffer), &(aesd_device.aesd_circ_buffer), index)
+       // kfree(aesd_device.aesd_actual_buffer->buffptr);
+
 
 	unregister_chrdev_region(devno, 1);
 }
