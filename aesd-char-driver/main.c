@@ -65,6 +65,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     size_t offset_byte;
     unsigned long ctu_return;
     size_t char_offset;
+    size_t out_offs_count = 0;
+    size_t total_size = dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size;
+    size_t buf_size = *f_pos;
 
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 	/**
@@ -75,15 +78,20 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     if(count > (dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size))
         count = dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size;
 
-    char_offset = *f_pos + dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs].size - 1;
-    if(char_offset == -1)
-        char_offset = 0;
+    while(*f_pos + 1 >= total_size)
+    {
+        out_offs_count++;
+        total_size += dev->aesd_circ_buffer.entry[(dev->aesd_circ_buffer.out_offs) + out_offs_count].size;
+    }
 
-    PDEBUG("buffptr = %p", (void *) &(dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs]));
+    char_offset = total_size - 1;
+    if(char_offset == -1) char_offset = 0;
+
+    //PDEBUG("buffptr = %p", (void *) &(dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs]));
 
     /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
-     char_offset , &offset_byte);
+     char_offset, &offset_byte);
 
     if(buffer_read_last == NULL)    
      PDEBUG("char0ff = %ld, offfbyte = %ld",char_offset, offset_byte);
@@ -94,15 +102,16 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /* Update fpos and kbuf ptr */
     *f_pos += offset_byte;
     kbuf = (char *)buffer_read_last->buffptr;
+    buf_size = *f_pos - buf_size + 1;
 
     if(kbuf == NULL) return 0;
 
     /* Copy kbuf to user-space buffer */
-    ctu_return = copy_to_user(buf, kbuf, count);
+    ctu_return = copy_to_user(buf, kbuf, buf_size);
     if(ctu_return != 0)
         PDEBUG("copy_to_user could not copy %lu bytes to user", ctu_return);
 
-    retval = char_offset;
+    retval = buf_size;
 	return retval;
 }
 
