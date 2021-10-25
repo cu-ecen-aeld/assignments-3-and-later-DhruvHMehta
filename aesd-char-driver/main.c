@@ -75,14 +75,21 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
-             *f_pos + count, &offset_byte);
+            (*f_pos + dev->aesd_circ_buffer[dev->aesd_circ_buffer.out_offs].size), &offset_byte);
+
+    if(buffer_read_last == NULL)
+        return 0;
 
     /* Update fpos and kbuf ptr */
     *f_pos += offset_byte;
     kbuf = (char *)buffer_read_last->buffptr;
 
+    if(kbuf == NULL) return 0;
+
     /* Copy kbuf to user-space buffer */
     ctu_return = copy_to_user(buf, kbuf, count);
+    if(ctu_return != 0)
+        PDEBUG("copy_to_user could not copy %lu bytes to user", ctu_return);
 
     retval = count;
 	return retval;
