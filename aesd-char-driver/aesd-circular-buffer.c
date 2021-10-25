@@ -58,7 +58,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     int buffer_count  = buffer->out_offs;
     size_t last_pos   = 0;
 
-    PDE1BUG("charoff from cb = %ld, retptr = %p", char_offset, (void *) &buffer->entry[buffer_count]);    
+    PDE1BUG("charoff from cb = %ld", char_offset);    
     while(char_offset > (char_count - 1))
     { 
         last_pos     = char_count; 
