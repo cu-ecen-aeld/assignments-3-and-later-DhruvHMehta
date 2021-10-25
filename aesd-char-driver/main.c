@@ -80,14 +80,20 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     while(*f_pos + 1 >= total_size)
     {
+        if(out_offs_count == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1)
+        {
+            retval = 0;
+            return retval;
+        }
         out_offs_count++;
+        PDEBUG("Total_size = %ld", total_size);
         total_size += dev->aesd_circ_buffer.entry[(dev->aesd_circ_buffer.out_offs) + out_offs_count].size;
+
     }
 
     char_offset = total_size - 1;
     if(char_offset == -1) char_offset = 0;
 
-    //PDEBUG("buffptr = %p", (void *) &(dev->aesd_circ_buffer.entry[dev->aesd_circ_buffer.out_offs]));
 
     /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
