@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #else
+#include <stdio.h>
 #include <string.h>
 #endif
 
