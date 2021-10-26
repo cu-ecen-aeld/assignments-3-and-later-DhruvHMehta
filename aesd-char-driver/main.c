@@ -80,10 +80,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	 * TODO: handle read
 	 */
     
-    /* Restrict reads to only the size of a single aesd_buffer_entry */
-    if(count > (dev->aesd_circ_buffer.entry[out_offs].size))
-        count = dev->aesd_circ_buffer.entry[out_offs].size;
-
     while(*f_pos >= total_size)
     {
         if(((out_offs_count + out_offs) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) == out_offs)
@@ -99,6 +95,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     char_offset = total_size - 1;
     if(char_offset == -1) char_offset = 0;
 
+    /* Check if the user requested less than the entry size's number of bytes */
+    if(count < char_offset)
+        char_offset = count;
 
     /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
