@@ -50,15 +50,15 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     * TODO: implement per description
     */
     
-    /* Check for NULL pointers */
-    if(buffer == NULL) 
-       return NULL;
-    
     /* Variable to track position of buffer entry */
     size_t char_count = (buffer->entry[buffer->out_offs]).size;
     int buffer_count  = buffer->out_offs;
     size_t last_pos   = 0;
 
+    /* Check for NULL pointers */
+    if(buffer == NULL) 
+       return NULL;
+    
     while(char_offset > (char_count - 1))
     { 
         last_pos     = char_count; 
@@ -92,11 +92,11 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     * TODO: implement per description 
     */
 
+    const char* freethisptr = NULL;
     /* Check for NULL pointers or zero size of entry */
     if(buffer == NULL || add_entry->buffptr == NULL || add_entry->size == 0) 
        return NULL; 
 
-    const char* freethisptr = NULL;
     if(buffer->full)
         freethisptr = buffer->entry[buffer->in_offs].buffptr;
 
