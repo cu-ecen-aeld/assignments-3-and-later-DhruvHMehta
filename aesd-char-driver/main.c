@@ -178,6 +178,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         strncpy(kbuf, dev->aesd_actual_buffer.buffptr, dev->aesd_actual_buffer.size);
 
         /* Free the old buffer */
+        PDEBUG("freedbuf from main = %p", (void *) dev->aesd_actual_buffer.buffptr);
         kfree(dev->aesd_actual_buffer.buffptr);
 
         /* Copy the user-space buffer into the kbuf after the old data */
@@ -239,9 +240,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
         /* If an entry is overwritten, free the kbuffer associated with it */
         if(freebuffer != NULL)
+        {
+            PDEBUG("freedbuf = %p", (void *)freebuffer);
             kfree(freebuffer);
+        }
     }
 
+    PDEBUG("kbuf from main = %p", (void *) kbuf);
     retval = count;
 
 out:
