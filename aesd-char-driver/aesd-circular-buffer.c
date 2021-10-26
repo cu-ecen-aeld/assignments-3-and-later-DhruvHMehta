@@ -94,11 +94,11 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 
     /* Check for NULL pointers or zero size of entry */
     if(buffer == NULL || add_entry->buffptr == NULL || add_entry->size == 0) 
-       return; 
+       return NULL; 
 
-    char* freethisptr = NULL;
+    const char* freethisptr = NULL;
     if(buffer->full)
-        freethisptr = buffer->entry[buffer->in_offs];
+        freethisptr = buffer->entry[buffer->in_offs].buffptr;
 
     /* Insert aesd_buffer_entry at in_offs, overwriting data in any case */
     buffer->entry[buffer->in_offs]  = *add_entry;
