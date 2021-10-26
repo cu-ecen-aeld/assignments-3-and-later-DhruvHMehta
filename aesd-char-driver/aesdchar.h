@@ -34,6 +34,8 @@ struct aesd_dev
     struct aesd_buffer_entry aesd_actual_buffer;    /* Working entry for buffer */
 	struct cdev cdev;	                            /* Char device structure	*/
     struct mutex lock;                              /* Lock for aesd_dev struct */
+    uint8_t nonewline_flag;                         /* Flag to indicate absence
+                                                       of newline in aesd_write */
 };
 
 

@@ -63,21 +63,17 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     { 
         last_pos     = char_count; 
         buffer_count = (buffer_count + 1) % (AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED);
-        PDE1BUG("1");
         /* Searched all entries and wrapped around, the char_offset exceeds the last byte */
         if(buffer_count == buffer->out_offs)
             return NULL;
-        PDE1BUG("2");
         char_count  += (buffer->entry[buffer_count]).size;
     }
 
     if(char_offset <= (char_count - 1))
     {
-        PDE1BUG("3");
         *entry_offset_byte_rtn = char_offset - last_pos;
         return &buffer->entry[buffer_count];
     }
-    PDE1BUG("4");
     return NULL;
 }
 

@@ -20,6 +20,7 @@
 #include "aesdchar.h"
 
 #include <linux/slab.h> // kmalloc
+#include <linux/string.h>
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -143,7 +144,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	ssize_t retval = -ENOMEM;
-    char *kbuf = NULL;
+    char *kbuf = NULL, *kbuf_newline = NULL;
     unsigned long cfu_return;
     struct aesd_dev *dev = (struct aesd_dev *)(filp->private_data);
 
@@ -154,30 +155,81 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	/**
 	 * TODO: handle write
 	 */
-    
-    /* Allocate requested memory in kernel buffer first */
-    kbuf = kmalloc(count, GFP_KERNEL);
-    if(kbuf == NULL)
-    {
-        retval = 0; 
-        goto out;
-    }
 
-    /* Copy the user-space buffer into the kbuf */
-    cfu_return = copy_from_user(kbuf, buf, count);
-    if(cfu_return != 0)
+    /* No newline was detected in previous write, buffer the old data with new data */
+    if(dev->nonewline_flag)
     {
-        PDEBUG("copy_from_user could not copy %lu bytes from user", cfu_return);
-        retval = -EFAULT;
-        goto out;
+        /* Allocate a new buffer to include the size of old data and new data */
+        kbuf = kmalloc(dev->aesd_actual_buffer.size + count, GFP_KERNEL)
+        if(kbuf == NULL)
+        {
+            retval = 0;
+            goto out;
+        }
+
+        /* Copy the old buffer to the start of the new buffer */
+        strncpy(kbuf, dev->aesd_actual_buffer.buffptr, dev->aesd_actual_buffer.size);
+
+        /* Free the old buffer */
+        kfree(dev->aesd_actual_buffer.buffptr);
+
+        /* Copy the user-space buffer into the kbuf after the old data */
+        cfu_return = copy_from_user(kbuf + dev->aesd_actual_buffer.size, buf, count);
+        if(cfu_return != 0)
+        {
+            PDEBUG("copy_from_user could not copy %lu bytes from user", cfu_return);
+            retval = -EFAULT;
+            goto out;
+        }
+        
     }
+  
+    /* New write request, malloc a buffer and copy from user */ 
+    else
+    {
+        /* Allocate requested memory in kernel buffer first */
+        kbuf = kmalloc(count, GFP_KERNEL);
+        if(kbuf == NULL)
+        {
+            retval = 0; 
+            goto out;
+        }
+
+        /* Copy the user-space buffer into the kbuf */
+        cfu_return = copy_from_user(kbuf, buf, count);
+        if(cfu_return != 0)
+        {
+            PDEBUG("copy_from_user could not copy %lu bytes from user", cfu_return);
+            retval = -EFAULT;
+            goto out;
+        }
+    } 
+    
     /* Copy the kbuf ptr and size to the buffptr in the circular buffer */
     dev->aesd_actual_buffer.buffptr = kbuf;
-    dev->aesd_actual_buffer.size   = count;
 
-    /* Add it to the circular buffer */
-    aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
+    /* Add it to previous size value */
+    if(dev->nonewline_flag) dev->aesd_actual_buffer.size += count;
+
+    else dev->aesd_actual_buffer.size  = count;
+
+    /* If a newline is not detected, set a flag to process buffer on next write */
+    kbuf_newline = strchr(kbuf, '\n');
+    if(kbuf_newline == NULL) 
+    {
+        dev->nonewline_flag = 1;
+        PDEBUG("newline not found");
+    }
+
+    /* Newline was detected, add entry to buffer */
+    else 
+    {
+        dev->nonewline_flag = 0;
+
+        /* Add it to the circular buffer */
+        aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
                                    &(dev->aesd_actual_buffer)); 
+    }
 
     retval = count;
 
