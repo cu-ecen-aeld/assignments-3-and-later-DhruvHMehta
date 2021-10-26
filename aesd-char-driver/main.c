@@ -96,10 +96,10 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     if(char_offset == -1) char_offset = 0;
 
     /* Check if the user requested less than the entry size's number of bytes */
-    if(count < char_offset)
-        char_offset = count;
+    if((*f_pos + count - 1) < char_offset)
+        char_offset = *f_pos + count - 1;
 
-    /* Get the aesd_buffer_entry ptr and the offset byte for fpos */
+    /* Get the aesd_buffer_entry ptr and the offset byte for f_pos */
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
      char_offset, &offset_byte);
 
@@ -112,8 +112,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         goto out;
     }
 
-    /* Update fpos and kbuf ptr */
-    *f_pos += offset_byte + 1;
+    /* Update f_pos and kbuf ptr */
+    *f_pos = char_offset + 1;
+    
     kbuf = (char *)buffer_read_last->buffptr;
     buf_size = *f_pos - buf_size;
 
