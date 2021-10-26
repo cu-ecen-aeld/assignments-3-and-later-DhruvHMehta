@@ -234,12 +234,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->nonewline_flag = 0;
 
         /* Add it to the circular buffer */
-        freebuffer = aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
+        aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
                                                  &(dev->aesd_actual_buffer)); 
 
         /* If an entry is overwritten, free the kbuffer associated with it */
-        if(freebuffer != NULL)
-            kfree(freebuffer);
+        //if(freebuffer != NULL)
+        //    kfree(freebuffer);
     }
 
     retval = count;
