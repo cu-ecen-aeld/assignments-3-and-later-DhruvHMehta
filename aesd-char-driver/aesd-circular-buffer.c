@@ -10,28 +10,14 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
-#include <linux/kernel.h>
+#include <linux/slab.h> //for kfree
 #else
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h> // for free
 #endif
 
 #include "aesd-circular-buffer.h"
-
-#define CB_DEBUG 0  //Remove comment on this line to enable debug
-
-#undef PDE1BUG             /* undef it, just in case */
-#ifdef CB_DEBUG
-#  ifdef __KERNEL__
-     /* This one if debugging is on, and kernel space */
-#    define PDE1BUG(fmt, args...) printk( KERN_DEBUG "aesdchar: " fmt, ## args)
-#  else
-     /* This one for user space */
-#    define PDE1BUG(fmt, args...) fprintf(stderr, fmt, ## args)
-#  endif
-#else
-#  define PDE1BUG(fmt, args...) /* not debugging: nothing */
-#endif
 
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
@@ -125,4 +111,22 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
+}
+
+void aesd_circular_buffer_clean(struct aesd_circular_buffer *buffer)
+{
+    uint8_t index;
+    struct aesd_buffer_entry *entry;
+
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, buffer, index)
+    {
+        if(entry->buffptr != NULL)
+        {
+#ifdef __KERNEL__
+            kfree(entry->buffptr);
+#else   
+             free((char *)entry->buffptr);
+#endif 
+        }
+    }
 }

@@ -313,9 +313,7 @@ void aesd_cleanup_module(void)
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
-     //AESD_CIRCULAR_BUFFER_FOREACH((&(aesd_device.aesd_actual_buffer)), (&(aesd_device.aesd_circ_buffer)), index)
-       // kfree(aesd_device.aesd_circ_buffer.entry[index]->buffptr);
-
+    aesd_circular_buffer_clean(&aesd_device.aesd_circ_buffer);
 
 	unregister_chrdev_region(devno, 1);
 }
