@@ -89,7 +89,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         }
         total_size += dev->aesd_circ_buffer.entry[(out_offs + out_offs_count) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED].size;
         out_offs_count++;
-        PDEBUG("Total_size = %ld, mycnt = %ld, f_pos = %lld", total_size, out_offs_count + out_offs, *f_pos);
+//        PDEBUG("Total_size = %ld, mycnt = %ld, f_pos = %lld", total_size, out_offs_count + out_offs, *f_pos);
     }
 
     char_offset = total_size - 1;

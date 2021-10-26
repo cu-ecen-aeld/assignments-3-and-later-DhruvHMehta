@@ -55,7 +55,6 @@ struct threadp
 	pthread_t thread;
 	int t_thread_id;
 	int t_client_fd;
-	int t_data_file;
 	char t_IP[20];
 	bool t_is_complete;
 };
@@ -175,7 +174,15 @@ void* TxRxData(void *thread_param)
 		return NULL;
 	}
 
-	/* For Signal Masking during recv and send */
+    /* Open file for writing */
+	int data_file = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, S_IRWXU);
+
+	if(data_file == -1)
+	{
+		perror("open failed\n");
+	}
+	
+    /* For Signal Masking during recv and send */
 	sigemptyset(&new_set);
 	sigaddset(&new_set, SIGINT);
 	sigaddset(&new_set, SIGTERM);
@@ -250,7 +257,7 @@ void* TxRxData(void *thread_param)
 	
 	/* Write to file */
 	pthread_mutex_lock(&file_mutex);
-	int wr_bytes = write(l_threadp->t_data_file, rxbuf, bufloc);
+	int wr_bytes = write(data_file, rxbuf, bufloc);
 	pthread_mutex_unlock(&file_mutex);
 
 	if(wr_bytes != bufloc)
@@ -264,15 +271,9 @@ void* TxRxData(void *thread_param)
 		return NULL;
 	}
 
-#if USE_AESD_CHAR_DEVICE
-#else
-	/* Set position of file pointer to start for reading */
-	lseek(l_threadp->t_data_file, 0, SEEK_SET);
-#endif
-
 	/* Set buffer index to start of the buffer and read byte-by-byte */
 	wrbufloc = 0;
-	while((fread_bytes = read(l_threadp->t_data_file, &rd_byte, sizeof(char))) > 0)
+	while((fread_bytes = read(data_file, &rd_byte, sizeof(char))) > 0)
 	{
 		if(fread_bytes == -1)
 		{
@@ -368,6 +369,8 @@ void* TxRxData(void *thread_param)
 		printf("close failed\n");
 		return NULL;
 	}
+
+    close(data_file);
 
 	syslog(LOG_DEBUG, "Closed connection from %s\n", l_threadp->t_IP);
 	free(rxbuf);
@@ -576,7 +579,6 @@ int main(int argc, char* argv[])
 		node = malloc(sizeof(struct slist_data_s));
 		(node->t_param).t_thread_id = threadid;
 		(node->t_param).t_client_fd = client_fd;
-		(node->t_param).t_data_file = data_file;
 		strcpy((node->t_param).t_IP, IP);
 		(node->t_param).t_is_complete = false;
 		SLIST_INSERT_HEAD(&head, node, entries);

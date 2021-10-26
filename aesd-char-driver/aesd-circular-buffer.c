@@ -17,7 +17,7 @@
 
 #include "aesd-circular-buffer.h"
 
-#define CB_DEBUG 1  //Remove comment on this line to enable debug
+#define CB_DEBUG 0  //Remove comment on this line to enable debug
 
 #undef PDE1BUG             /* undef it, just in case */
 #ifdef CB_DEBUG
