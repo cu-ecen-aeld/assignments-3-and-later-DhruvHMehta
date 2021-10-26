@@ -222,7 +222,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     else dev->aesd_actual_buffer.size  = count;
 
     /* If a newline is not detected, set a flag to process buffer on next write */
-    kbuf_newline = strchr(kbuf, '\n');
+    kbuf_newline = strnchr(kbuf, dev->aesd_actual_buffer.size, '\n');
     if(kbuf_newline == NULL) 
     {
         dev->nonewline_flag = 1;
