@@ -85,7 +85,6 @@ static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
 	{
-		syslog(LOG_DEBUG, "Caught signal, exiting\n");
 		if(shutdown(socket_fd, SHUT_RDWR))
 		{
 			perror("Failed on shutdown()");
@@ -552,7 +551,8 @@ int main(int argc, char* argv[])
 		    printf("Error %d (%s) setting timer\n",errno,strerror(errno));
 		}
 	}
-	
+    close(data_file);
+
 	while(!quitpgm)
 	{		
 
@@ -594,7 +594,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-cleanexit:	
+cleanexit:
+
+    syslog(LOG_DEBUG, "Caught signal, exiting\n");
 	close(data_file);
 	close(client_fd);
 	close(socket_fd);
