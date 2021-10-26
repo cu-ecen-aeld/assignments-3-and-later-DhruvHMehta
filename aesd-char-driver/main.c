@@ -160,7 +160,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if(dev->nonewline_flag)
     {
         /* Allocate a new buffer to include the size of old data and new data */
-        kbuf = kmalloc(dev->aesd_actual_buffer.size + count, GFP_KERNEL)
+        kbuf = kmalloc(dev->aesd_actual_buffer.size + count, GFP_KERNEL);
         if(kbuf == NULL)
         {
             retval = 0;

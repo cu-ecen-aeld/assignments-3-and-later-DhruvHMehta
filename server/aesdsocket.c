@@ -36,7 +36,14 @@
 #define PORT 		"9000"
 #define BACKLOG		5
 #define BUF_SIZE	100
+
+#define USE_AESD_CHAR_DEVICE 1
+
+#if USE_AESD_CHAR_DEVICE
+#define FILE_PATH   "/dev/aesdchar"
+#else
 #define FILE_PATH	"/var/tmp/aesdsocketdata"
+#endif
 
 /* Socket File descriptor */
 int socket_fd;
@@ -99,8 +106,6 @@ static void timer_thread(union sigval sigval)
 		return;
 	}
 
-	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
-
 	time_t cur_time = time(NULL);
 	
 	/* Get time in broken-down struct */
@@ -114,7 +119,11 @@ static void timer_thread(union sigval sigval)
 		return;
 	}	
 
-	if(pthread_mutex_lock(&file_mutex) != 0)
+#if USE_AESD_CHAR_DEVICE
+#else
+	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
+    
+    if(pthread_mutex_lock(&file_mutex) != 0)
 	{
 		perror("Mutex lock failed\n");
 		free(str);
@@ -132,7 +141,7 @@ static void timer_thread(union sigval sigval)
 		free(str);
 		return;
 	}
-	
+#endif
 	free(str);
 
 }
@@ -251,8 +260,12 @@ void* TxRxData(void *thread_param)
 		free(txbuf);
 		return NULL;
 	}
+
+#if USE_AESD_CHAR_DEVICE
+#else
 	/* Set position of file pointer to start for reading */
 	lseek(l_threadp->t_data_file, 0, SEEK_SET);
+#endif
 
 	/* Set buffer index to start of the buffer and read byte-by-byte */
 	wrbufloc = 0;
