@@ -199,6 +199,9 @@ void* TxRxData(void *thread_param)
 			return NULL;
 		}
 
+    for(int i = 0; i < recv_bytes; i++){
+        syslog(LOG_CRIT, "%c", rxbuf[i]);}
+
 		/* Detect newline character */
 		char* newlineloc = strchr(rxbuf, '\n');
 
@@ -289,6 +292,7 @@ void* TxRxData(void *thread_param)
 
 		/* Add a byte to the string */
 		txbuf[wrbufloc] = rd_byte;
+        syslog(LOG_CRIT, "=%c",rd_byte);
 
 		/* Check if newline */
 		if(txbuf[wrbufloc] == '\n')
