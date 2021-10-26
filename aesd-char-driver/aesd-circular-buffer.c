@@ -59,7 +59,6 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     int buffer_count  = buffer->out_offs;
     size_t last_pos   = 0;
 
-    PDE1BUG("charoff from cb = %ld", char_offset);    
     while(char_offset > (char_count - 1))
     { 
         last_pos     = char_count; 
@@ -84,8 +83,10 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * new start location.
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
+* @return NULL or, if an existing entry at the out_offs was replaced,
+* the value of buffptr for the entry which was replaced (for use dynamic memory allocation/free)
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
     /**
     * TODO: implement per description 
@@ -94,6 +95,10 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     /* Check for NULL pointers or zero size of entry */
     if(buffer == NULL || add_entry->buffptr == NULL || add_entry->size == 0) 
        return; 
+
+    char* freethisptr = NULL;
+    if(buffer->full)
+        freethisptr = buffer->entry[buffer->in_offs];
 
     /* Insert aesd_buffer_entry at in_offs, overwriting data in any case */
     buffer->entry[buffer->in_offs]  = *add_entry;
@@ -111,6 +116,7 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         buffer->full     = 1;
     }   
 
+    return freethisptr;
 }
 
 /**

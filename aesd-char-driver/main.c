@@ -80,8 +80,10 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	 * TODO: handle read
 	 */
     
+    /* Extend the search space beyond the current file position */
     while(*f_pos >= total_size)
     {
+        /* If it wraps around, the buffer is empty, return 0 as nothing is read */
         if(((out_offs_count + out_offs) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) == out_offs)
         {
             retval = 0;
@@ -92,6 +94,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 //        PDEBUG("Total_size = %ld, mycnt = %ld, f_pos = %lld", total_size, out_offs_count + out_offs, *f_pos);
     }
 
+    /* Get the entire entry */
     char_offset = total_size - 1;
     if(char_offset == -1) char_offset = 0;
 
@@ -103,9 +106,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
      buffer_read_last = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_circ_buffer),
      char_offset, &offset_byte);
 
-    if(buffer_read_last == NULL)    
-     PDEBUG("char0ff = %ld, offfbyte = %ld",char_offset, offset_byte);
-	
+    /* The entry was not found, no read */
     if(buffer_read_last == NULL)
     {
         retval = 0;
@@ -115,12 +116,14 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /* Update f_pos and kbuf ptr */
     *f_pos = char_offset + 1;
     
+    /* For byte-wise reads, we need a pointer to the exact char byte */
     if(count == 1) kbuf = ((char *)(buffer_read_last->buffptr) + offset_byte);
     
+    /* For entrywise read, read the first location from the buffer */
     else kbuf = (char *)buffer_read_last->buffptr;
     buf_size = *f_pos - buf_size;
 
-    PDEBUG("buffer = %c and size = %ld", *kbuf, buf_size);
+//    PDEBUG("buffer = %c and size = %ld", *kbuf, buf_size);
     if(kbuf == NULL)
     {
         retval = 0;
@@ -150,6 +153,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     char *kbuf = NULL, *kbuf_newline = NULL;
     unsigned long cfu_return;
     struct aesd_dev *dev = (struct aesd_dev *)(filp->private_data);
+    char* freebuffer = NULL;
 
     if(mutex_lock_interruptible(&dev->lock))
         return -ERESTARTSYS;
@@ -230,8 +234,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->nonewline_flag = 0;
 
         /* Add it to the circular buffer */
-        aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
-                                   &(dev->aesd_actual_buffer)); 
+        freebuffer = aesd_circular_buffer_add_entry(&(dev->aesd_circ_buffer),
+                                                 &(dev->aesd_actual_buffer)); 
+
+        /* If an entry is overwritten, free the kbuffer associated with it */
+        if(freebuffer != NULL)
+            kfree(freebuffer);
     }
 
     retval = count;
