@@ -36,7 +36,14 @@
 #define PORT 		"9000"
 #define BACKLOG		5
 #define BUF_SIZE	100
+
+#define USE_AESD_CHAR_DEVICE 1
+
+#if USE_AESD_CHAR_DEVICE
+#define FILE_PATH   "/dev/aesdchar"
+#else
 #define FILE_PATH	"/var/tmp/aesdsocketdata"
+#endif
 
 /* Socket File descriptor */
 int socket_fd;
@@ -48,7 +55,6 @@ struct threadp
 	pthread_t thread;
 	int t_thread_id;
 	int t_client_fd;
-	int t_data_file;
 	char t_IP[20];
 	bool t_is_complete;
 };
@@ -79,7 +85,6 @@ static void sighandler(int signo)
 {
 	if((signo == SIGINT) || (signo == SIGTERM))
 	{
-		syslog(LOG_DEBUG, "Caught signal, exiting\n");
 		if(shutdown(socket_fd, SHUT_RDWR))
 		{
 			perror("Failed on shutdown()");
@@ -99,8 +104,6 @@ static void timer_thread(union sigval sigval)
 		return;
 	}
 
-	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
-
 	time_t cur_time = time(NULL);
 	
 	/* Get time in broken-down struct */
@@ -114,7 +117,11 @@ static void timer_thread(union sigval sigval)
 		return;
 	}	
 
-	if(pthread_mutex_lock(&file_mutex) != 0)
+#if USE_AESD_CHAR_DEVICE
+#else
+	struct timethreadp *td = (struct timethreadp *)sigval.sival_ptr;
+    
+    if(pthread_mutex_lock(&file_mutex) != 0)
 	{
 		perror("Mutex lock failed\n");
 		free(str);
@@ -132,7 +139,7 @@ static void timer_thread(union sigval sigval)
 		free(str);
 		return;
 	}
-	
+#endif
 	free(str);
 
 }
@@ -166,7 +173,15 @@ void* TxRxData(void *thread_param)
 		return NULL;
 	}
 
-	/* For Signal Masking during recv and send */
+    /* Open file for writing */
+	int data_file = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, S_IRWXU);
+
+	if(data_file == -1)
+	{
+		perror("open failed\n");
+	}
+	
+    /* For Signal Masking during recv and send */
 	sigemptyset(&new_set);
 	sigaddset(&new_set, SIGINT);
 	sigaddset(&new_set, SIGTERM);
@@ -189,6 +204,9 @@ void* TxRxData(void *thread_param)
 			free(txbuf);
 			return NULL;
 		}
+
+    for(int i = 0; i < recv_bytes; i++){
+        syslog(LOG_CRIT, "%c", rxbuf[i]);}
 
 		/* Detect newline character */
 		char* newlineloc = strchr(rxbuf, '\n');
@@ -238,7 +256,7 @@ void* TxRxData(void *thread_param)
 	
 	/* Write to file */
 	pthread_mutex_lock(&file_mutex);
-	int wr_bytes = write(l_threadp->t_data_file, rxbuf, bufloc);
+	int wr_bytes = write(data_file, rxbuf, bufloc);
 	pthread_mutex_unlock(&file_mutex);
 
 	if(wr_bytes != bufloc)
@@ -251,12 +269,10 @@ void* TxRxData(void *thread_param)
 		free(txbuf);
 		return NULL;
 	}
-	/* Set position of file pointer to start for reading */
-	lseek(l_threadp->t_data_file, 0, SEEK_SET);
 
 	/* Set buffer index to start of the buffer and read byte-by-byte */
 	wrbufloc = 0;
-	while((fread_bytes = read(l_threadp->t_data_file, &rd_byte, sizeof(char))) > 0)
+	while((fread_bytes = read(data_file, &rd_byte, sizeof(char))) > 0)
 	{
 		if(fread_bytes == -1)
 		{
@@ -276,6 +292,7 @@ void* TxRxData(void *thread_param)
 
 		/* Add a byte to the string */
 		txbuf[wrbufloc] = rd_byte;
+        syslog(LOG_CRIT, "=%c",rd_byte);
 
 		/* Check if newline */
 		if(txbuf[wrbufloc] == '\n')
@@ -351,6 +368,8 @@ void* TxRxData(void *thread_param)
 		printf("close failed\n");
 		return NULL;
 	}
+
+    close(data_file);
 
 	syslog(LOG_DEBUG, "Closed connection from %s\n", l_threadp->t_IP);
 	free(rxbuf);
@@ -532,7 +551,8 @@ int main(int argc, char* argv[])
 		    printf("Error %d (%s) setting timer\n",errno,strerror(errno));
 		}
 	}
-	
+    close(data_file);
+
 	while(!quitpgm)
 	{		
 
@@ -559,7 +579,6 @@ int main(int argc, char* argv[])
 		node = malloc(sizeof(struct slist_data_s));
 		(node->t_param).t_thread_id = threadid;
 		(node->t_param).t_client_fd = client_fd;
-		(node->t_param).t_data_file = data_file;
 		strcpy((node->t_param).t_IP, IP);
 		(node->t_param).t_is_complete = false;
 		SLIST_INSERT_HEAD(&head, node, entries);
@@ -575,7 +594,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-cleanexit:	
+cleanexit:
+
+    syslog(LOG_DEBUG, "Caught signal, exiting\n");
 	close(data_file);
 	close(client_fd);
 	close(socket_fd);
